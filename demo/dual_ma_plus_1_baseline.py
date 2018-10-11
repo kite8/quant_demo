@@ -22,7 +22,7 @@ def initialize(context):
                 reference_security='000300.XSHG')
     run_daily(market_open, time='every_bar',
                 reference_security='000300.XSHG')
-    run_daily(market_open, time='after_close',
+    run_daily(after_market_close, time='after_close',
                 reference_security='000300.XSHG')
     # 设定股票池
     g.stock_pool = get_index_stocks("000016.XSHG", date=context.current_dt)
