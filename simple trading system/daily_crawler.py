@@ -17,7 +17,7 @@ import datetime
 class DailyCrawler:
     def __init__(self):
         self.daily = DB_CONN['daily']
-        self.daily = DB_CONN['daily_hfq']
+        self.daily_hfq = DB_CONN['daily_hfq']
         self.daily.create_index(
             [('code',ASCENDING), ('date',ASCENDING), ('index',ASCENDING)])
         self.daily_hfq.create_index(
@@ -60,11 +60,11 @@ class DailyCrawler:
                             upsert=True)
                     )
                     
-            if len(update_requests) > 0:
-                update_result = collection.bulk_write(update_requests, ordered=False)
-                print('保存日线数据，代码： %s, 插入：%4d条, 更新：%4d条' %
-                  (code, update_result.upserted_count, update_result.modified_count),
-                  flush=True)
+        if len(update_requests) > 0:
+            update_result = collection.bulk_write(update_requests, ordered=False)
+            print('保存日线数据，代码： %s, 插入：%4d条, 更新：%4d条' %
+              (code, update_result.upserted_count, update_result.modified_count),
+              flush=True)
     
     def crawl(self, code, start, end=None):
         """
