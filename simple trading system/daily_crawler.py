@@ -23,6 +23,11 @@ class DailyCrawler:
         self.daily_hfq.create_index(
             [('code',ASCENDING), ('date',ASCENDING), ('index',ASCENDING)])
         
+        self.daily.create_index(
+            [('code',ASCENDING), ('date',ASCENDING)])
+        self.daily_hfq.create_index(
+            [('code',ASCENDING), ('date',ASCENDING)])
+        
     def crawl_index(self, code, start, end=None):
         """
         

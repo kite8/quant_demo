@@ -39,6 +39,7 @@ def crawl_basic_at_date(date):
     """
     
     """
+    
     df_basics = ts.get_stock_basics(date)
     # 如果没有创建索引，这里需要创建索引
     if df_basics is None:
@@ -58,6 +59,7 @@ def crawl_basic_at_date(date):
             doc.update({
                     'code':code,
                     'date':date,
+                    'name':doc['name'],
                     'timeToMarket':time_to_market,
                     'outstanding':outstanding,
                     'totals':totals
@@ -84,9 +86,8 @@ if __name__ == '__main__':
     col_list = DB_CONN.list_collection_names()
     if 'basic' not in col_list:
         basic_col = DB_CONN['basic']
-    try:
-        DB_CONN['basic'].create_index(
-            [('code',ASCENDING), ('date',ASCENDING)])
-    except:
-        pass
+        if 'code_1_date_1' not in basic_col.index_information().keys():
+            DB_CONN['basic'].create_index(
+                [('code',ASCENDING), ('date',ASCENDING)])
+        
     crawl_basic('2017-01-01', '2017-12-31')
