@@ -82,11 +82,11 @@ def crawl_basic_at_date(date):
     
     
 if __name__ == '__main__':
-    col_list = DB_CONN.list_collection_names()
-    if 'basic' not in col_list:
-        basic_col = DB_CONN['basic']
-        if 'code_1_date_1' not in basic_col.index_information().keys():
-            DB_CONN['basic'].create_index(
-                [('code',ASCENDING), ('date',ASCENDING)])
+#    col_list = DB_CONN.list_collection_names()
+#    if 'basic' not in col_list:
+    basic_col = DB_CONN['basic']
+    if 'code_1_date_1' not in basic_col.index_information().keys():
+        DB_CONN['basic'].create_index(
+            [('code',ASCENDING), ('date',ASCENDING)])
         
     crawl_basic('2017-01-01', '2017-12-31')

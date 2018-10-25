@@ -8,6 +8,7 @@ import datetime
 from pymongo import UpdateOne, ASCENDING
 from database import DB_CONN
 from stock_util import get_trading_dates, get_all_codes
+import tushare as ts
 import numpy as np
 import pandas as pd
 import requests
@@ -134,7 +135,7 @@ def fill_high_and_low_price_at_one_date(date):
     """
     
     """
-    codes = get_all_codes()
+    codes = ts.get_stock_basics().index.tolist() # get_all_codes()
     st_mark = ['st', 'ST', '*st', '*ST']
     update_requests = []
     

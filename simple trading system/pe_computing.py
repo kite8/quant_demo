@@ -66,11 +66,11 @@ def compute_pe():
 
 
 if __name__ == "__main__":
-    col_list = DB_CONN.list_collection_names()
-    if 'finance_report' not in col_list:
-        finance_report_col = DB_CONN['finance_report']
-        if 'code_1_report_date_1' not in finance_report_col.index_information().keys():
-            DB_CONN['basic'].create_index(
-                [('code',ASCENDING), ('report_date',ASCENDING), ('announced_date',ASCENDING)])    
+#    col_list = DB_CONN.list_collection_names()
+#    if 'finance_report' not in col_list:
+    finance_report_col = DB_CONN['finance_report']
+    if 'code_1_report_date_1' not in finance_report_col.index_information().keys():
+        DB_CONN['finance_report'].create_index(
+            [('code',ASCENDING), ('report_date',ASCENDING), ('announced_date',ASCENDING)])    
 
     compute_pe()

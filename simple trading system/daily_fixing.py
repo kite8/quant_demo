@@ -219,7 +219,7 @@ def fill_au_factor_pre_close(begin_date, end_date):
 
 
 if __name__ == '__main__':
-    start = '2016-01-01'
+    start = '2015-01-01'
     end = '2017-12-31'
     
     fill_au_factor_pre_close(start, end)

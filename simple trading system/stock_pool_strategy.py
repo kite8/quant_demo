@@ -187,16 +187,16 @@ def evaluate_stock_pool():
 
 
 if __name__ == "__main__":
-    col_list = DB_CONN.list_collection_names()
-    if 'daily' not in col_list:
-        daily_col = DB_CONN['daily']
-                
-        if 'date_1_pe_1_is_trading_1' not in daily_col.index_information().keys():
-            DB_CONN['daily'].create_index(
-                [('date',ASCENDING), ('pe',ASCENDING), ('is_trading',ASCENDING)])
+#    col_list = DB_CONN.list_collection_names()
+#    if 'daily' not in col_list:
+    daily_col = DB_CONN['daily']
             
-        if 'code_1_date_1_is_trading_1' not in daily_col.index_information().keys():
-            DB_CONN['daily'].create_index(
-                [('code',ASCENDING), ('date',ASCENDING), ('is_trading',ASCENDING)]) 
+    if 'date_1_pe_1_is_trading_1' not in daily_col.index_information().keys():
+        DB_CONN['daily'].create_index(
+            [('date',ASCENDING), ('pe',ASCENDING), ('is_trading',ASCENDING)])
+        
+    if 'code_1_date_1_is_trading_1' not in daily_col.index_information().keys():
+        DB_CONN['daily'].create_index(
+            [('code',ASCENDING), ('date',ASCENDING), ('is_trading',ASCENDING)]) 
 
     evaluate_stock_pool()
