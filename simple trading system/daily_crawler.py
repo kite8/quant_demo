@@ -42,7 +42,7 @@ class DailyCrawler:
         
         else:
             for c in code:
-                df_daily = ts.get_k_data(c, start, end, autype=None)
+                df_daily = ts.get_k_data(c, start, end, index=True)
                 self.save_data(c, df_daily, self.daily, {'index':True})
                     
     def save_data(self, code, df_daily, collection, extra_fields=None):
@@ -104,9 +104,10 @@ if __name__ == '__main__':
     
     index_code_list = ['000001', '000300', '399001', '399005', '399006']
     stock_code_list = ts.get_stock_basics().index.tolist()
+#    stock_code_list = ['000001', '000300', '399001', '399005', '399006']
     
     start = '2015-01-01'
-    end = '2015-12-31'
+    end = '2017-12-31'
     dc.crawl_index(index_code_list, start, end)
     dc.crawl(stock_code_list, start, end)
     

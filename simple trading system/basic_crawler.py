@@ -59,7 +59,6 @@ def crawl_basic_at_date(date):
             doc.update({
                     'code':code,
                     'date':date,
-                    'name':doc['name'],
                     'timeToMarket':time_to_market,
                     'outstanding':outstanding,
                     'totals':totals
