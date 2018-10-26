@@ -204,6 +204,7 @@ def backtest(begin_date, end_date):
                 projection={'code': True, 'au_factor': True})
 
             for current_daily in current_daily_cursor:
+                print(current_daily['code'], _date)
                 current_aufactor = current_daily['au_factor']
                 code = current_daily['code']
                 before_volume = holding_code_dict[code]['volume']

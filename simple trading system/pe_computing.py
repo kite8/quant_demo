@@ -17,7 +17,8 @@ compute_pe：计算市盈率
 from pymongo import ASCENDING, DESCENDING, UpdateOne
 
 from database import DB_CONN
-from stock_util import get_all_codes
+#from stock_util import get_all_codes
+import tushare as ts
 
 finance_report_collection = DB_CONN['finance_report']
 daily_collection = DB_CONN['daily']
@@ -29,9 +30,9 @@ def compute_pe():
     """
 
     # 获取所有股票
-    codes = get_all_codes()
-
-    for code in codes:
+    codes = ts.get_stock_basics().index.tolist() # get_all_codes()
+    total = len(codes)
+    for i,code in enumerate(codes):
         print('计算市盈率, %s' % code)
         daily_cursor = daily_collection.find(
             {'code': code},
@@ -63,13 +64,13 @@ def compute_pe():
         if len(update_requests) > 0:
             update_result = daily_collection.bulk_write(update_requests, ordered=False)
             print('更新PE, %s, 更新：%d' % (code, update_result.modified_count))
-
+        print('pe计算进度: (%s/%s)' % (i+1, total))
 
 if __name__ == "__main__":
 #    col_list = DB_CONN.list_collection_names()
 #    if 'finance_report' not in col_list:
     finance_report_col = DB_CONN['finance_report']
-    if 'code_1_report_date_1' not in finance_report_col.index_information().keys():
+    if 'code_1_report_date_1_announced_date_1' not in finance_report_col.index_information().keys():
         DB_CONN['finance_report'].create_index(
             [('code',ASCENDING), ('report_date',ASCENDING), ('announced_date',ASCENDING)])    
 

@@ -59,7 +59,7 @@ def stock_pool(begin_date, end_date):
         # 查询出调整当日，0 < pe_ttm < 30，且非停牌的股票
         # 最重要的一点是，按照pe_ttm正序排列，只取前100只
         daily_cursor = daily.find(
-            {'date': adjust_date, 'pe': {'$lt': 30, '$gt': 0},
+            {'date': adjust_date, 'pe': {'$lt': 30, '$gt': 0}, 'index':False,
              'is_trading': True},
             sort=[('pe', ASCENDING)],
             projection={'code': True},
@@ -191,9 +191,9 @@ if __name__ == "__main__":
 #    if 'daily' not in col_list:
     daily_col = DB_CONN['daily']
             
-    if 'date_1_pe_1_is_trading_1' not in daily_col.index_information().keys():
+    if 'date_1_pe_1_index_1_is_trading_1' not in daily_col.index_information().keys():
         DB_CONN['daily'].create_index(
-            [('date',ASCENDING), ('pe',ASCENDING), ('is_trading',ASCENDING)])
+            [('date',ASCENDING), ('pe',ASCENDING), ('index', ASCENDING), ('is_trading',ASCENDING)])
         
     if 'code_1_date_1_is_trading_1' not in daily_col.index_information().keys():
         DB_CONN['daily'].create_index(

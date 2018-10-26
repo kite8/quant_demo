@@ -126,23 +126,31 @@ def fill_high_and_low_price_between(start, end):
     
     
     all_trades = get_trading_dates(start, end)
-#    basics = getBasics()
-    
-    for date in all_trades:
-        fill_high_and_low_price_at_one_date(date)
-
-def fill_high_and_low_price_at_one_date(date):
-    """
-    
-    """
     codes = ts.get_stock_basics().index.tolist() # get_all_codes()
+#    basics = getBasics()
+    total = len(all_trades)
+    for i,date in enumerate(all_trades):
+        fill_high_and_low_price_at_one_date(codes, date)
+        print('涨跌停计算进度: (%s/%s)' % (i+1, total))
+
+def fill_high_and_low_price_at_one_date(codes, date):
+    """
+    
+    """
+    
     st_mark = ['st', 'ST', '*st', '*ST']
     update_requests = []
     
+    if date < '2016-08-09':
+        _date = '2016-08-08'
+    # 用于获取code的基本信息
+    else:
+        _date = date
+    
     for code in codes:
         basic_cursor = DB_CONN['basic'].find(
-                {'code':code, 'date':date}, 
-                projection={'code':True, 'date':date,
+                {'code':code, 'date':_date}, 
+                projection={'code':True, 'date':True,
                'name':True, 'timeToMarket':True, '_id':False})
         
         basics = [i for i in basic_cursor]
@@ -209,19 +217,9 @@ def fill_high_and_low_price_at_one_date(date):
 
 
 
-
-
-
-
-
-
-
-
-
-
 #  main funciton
 if __name__ == '__main__':
-    start = '2017-01-01'
+    start = '2015-01-01'
     end = '2017-12-31'
     
 #    fill_issueprice()

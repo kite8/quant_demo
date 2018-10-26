@@ -8,7 +8,8 @@ import datetime
 from datetime import datetime, timedelta
 from pymongo import UpdateOne, ASCENDING
 from database import DB_CONN
-from stock_util import get_trading_dates, get_all_codes
+from stock_util import get_trading_dates# , get_all_codes
+import tushare as ts
 
 """
 日K线数据的修复
@@ -22,10 +23,11 @@ def fill_is_trading_between(begin_date=None, end_date=None):
     :param end_date: 结束日期
     """
     all_dates = get_trading_dates(begin_date, end_date)
-
-    for date in all_dates:
+    total = len(all_dates)
+    for i,date in enumerate(all_dates):
         fill_single_date_is_trading(date, 'daily')
         fill_single_date_is_trading(date, 'daily_hfq')
+        print('is_trading字段填充进度: (%s/%s)' % (i+1, total))
 
 
 def fill_is_trading(date=None):
@@ -120,7 +122,8 @@ def fill_daily_k_at_suspension_days_at_date_one_collection(
     :return:
     """
     code_last_trading_daily_dict = dict()
-    for date in all_dates:
+    total = len(all_dates)
+    for i,date in enumerate(all_dates):
         update_requests = []
         last_daily_code_set = set(code_last_trading_daily_dict.keys())
         for basic in basics:
@@ -156,7 +159,7 @@ def fill_daily_k_at_suspension_days_at_date_one_collection(
             update_result = DB_CONN[collection].bulk_write(update_requests, ordered=False)
             print('填充停牌数据，日期：%s，数据集：%s，插入：%4d条，更新：%4d条' %
                   (date, collection, update_result.upserted_count, update_result.modified_count), flush=True)
-
+        print('%s数据库复权因子和pre_close字段填充进度: (%s/%s)' % (collection, i+1, total))
 
 def fill_au_factor_pre_close(begin_date, end_date):
     """
@@ -166,9 +169,9 @@ def fill_au_factor_pre_close(begin_date, end_date):
     :param begin_date: 开始日期
     :param end_date: 结束日期
     """
-    all_codes = get_all_codes()
-
-    for code in all_codes:
+    all_codes = ts.get_stock_basics().index.tolist() # get_all_codes()
+    total = len(all_codes)
+    for i,code in enumerate(all_codes):
         hfq_daily_cursor = DB_CONN['daily_hfq'].find(
             {'code': code, 'date': {'$lte': end_date, '$gte': begin_date}, 'index': False},
             sort=[('date', ASCENDING)],
@@ -214,14 +217,14 @@ def fill_au_factor_pre_close(begin_date, end_date):
 
         if len(update_requests) > 0:
             update_result = DB_CONN['daily'].bulk_write(update_requests, ordered=False)
-            print('填充复权因子和前收，股票：%s，更新：%4d条' %
-                  (code, update_result.modified_count), flush=True)
+            print('填充复权因子和前收，进度：(%s / %s), 股票：%s，更新：%4d条' %
+                  (i+1, total, code, update_result.modified_count), flush=True)
 
 
 if __name__ == '__main__':
     start = '2015-01-01'
     end = '2017-12-31'
     
-    fill_au_factor_pre_close(start, end)
     fill_is_trading_between(start, end)
     fill_daily_k_at_suspension_days(start, end)
+    fill_au_factor_pre_close(start, end)
