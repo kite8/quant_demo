@@ -34,8 +34,8 @@ def crawl_finance_report():
           '&filter=(scode={0})&p={page}&ps={pageSize}&js={"pages":(tp),"data":%20(x)}'
     
     error_code = []
-    
-    for code in codes:
+    total = len(codes)
+    for i, code in enumerate(codes):
         retry = True
         retry_num = 0
         while retry and retry_num<=3:
@@ -79,6 +79,7 @@ def crawl_finance_report():
             update_result = DB_CONN['finance_report'].bulk_write(update_requests, ordered=False)
             print('股票 %s, 财报，更新 %d, 插入 %d' %
                   (code, update_result.modified_count, update_result.upserted_count))
+        print('财报数据获取进度: (%s/%s)' % (i+1, total))
     print('error code list :', error_code, flush=True)
 
 

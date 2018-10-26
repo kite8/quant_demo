@@ -41,9 +41,11 @@ class DailyCrawler:
             self.save_data(code, df_daily, self.daily, {'index':True})
         
         else:
-            for c in code:
+            total = len(code)
+            for i, c in enumerate(code):
                 df_daily = ts.get_k_data(c, start, end, index=True)
                 self.save_data(c, df_daily, self.daily, {'index':True})
+                print('index日线数据获取进度: (%s/%s)' % (i+1, total))
                     
     def save_data(self, code, df_daily, collection, extra_fields=None):
         """
@@ -79,13 +81,14 @@ class DailyCrawler:
         start = str(start)[0:10]
         end = str(end)[0:10]
         
-        for c in code:
+        total = len(code)
+        for i, c in enumerate(code):
             df_daily = ts.get_k_data(c, start, end, autype=None)
             self.save_data(c, df_daily, self.daily, {'index':False})
             
             df_daily_hfq = ts.get_k_data(c, start, end, autype='hfq')
             self.save_data(c, df_daily_hfq, self.daily_hfq, {'index':False})
-    
+            print('股票日线数据获取进度: (%s/%s)' % (i+1, total))
     
     @staticmethod
     def daily_obj_2_doc(code, daily_obj):

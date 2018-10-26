@@ -28,12 +28,13 @@ def crawl_basic(start, end=None):
     all_dates = get_trading_dates(start, end)
     if all_dates is None:
         print('没有获取到交易日历')
-    
-    for date in all_dates:
+    total = len(all_dates)
+    for i, date in enumerate(all_dates):
         try:
             crawl_basic_at_date(date)
         except:
             print('抓取股票基本信息时出错，日期：%s' % date, flush=True)
+        print('基础信息数据获取进度: (%s/%s)' % (i+1, total))
             
 def crawl_basic_at_date(date):
     """
@@ -89,4 +90,4 @@ if __name__ == '__main__':
         DB_CONN['basic'].create_index(
             [('code',ASCENDING), ('date',ASCENDING)])
         
-    crawl_basic('2017-01-01', '2017-12-31')
+    crawl_basic('2016-08-09', '2017-12-31')
