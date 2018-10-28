@@ -62,7 +62,7 @@ def stock_pool(begin_date, end_date):
             {'date': adjust_date, 'pe': {'$lt': 30, '$gt': 0}, 'index':False,
              'is_trading': True},
             sort=[('pe', ASCENDING)],
-            projection={'code': True},
+            projection={'code': True, '_id':False},
             limit=100
         )
 
@@ -128,7 +128,7 @@ def evaluate_stock_pool():
 
     df_profit.loc[adjust_dates[0]] = {'profit': 0, 'hs300': 0}
 
-    hs300_begin_value = daily.find_one({'code': '000300', 'index': True, 'date': adjust_dates[0]})['close']
+    hs300_begin_value = daily.find_one({'code': '000300', 'date': adjust_dates[0], 'index': True})['close']
 
     # 通过净值计算累计收益
     net_value = 1
@@ -142,7 +142,7 @@ def evaluate_stock_pool():
         code_buy_close_dict = dict()
         buy_daily_cursor = daily_hfq.find(
             {'code': {'$in': codes}, 'date': last_adjust_date},
-            projection={'close': True, 'code': True}
+            projection={'close': True, 'code': True, '_id':False}
         )
 
         for buy_daily in buy_daily_cursor:
@@ -152,7 +152,7 @@ def evaluate_stock_pool():
         # 获取到期的股价
         sell_daily_cursor = daily_hfq.find(
             {'code': {'$in': codes}, 'date': current_adjust_date},
-            projection={'close': True, 'code': True}
+            projection={'close': True, 'code': True, '_id':False}
         )
 
         # 计算单期收益
@@ -172,7 +172,7 @@ def evaluate_stock_pool():
         if count > 0:
             profit = round(profit_sum / count, 4)
 
-            hs300_close = daily.find_one({'code': '000300', 'index': True, 'date': current_adjust_date})['close']
+            hs300_close = daily.find_one({'code': '000300', 'date': current_adjust_date, 'index':True})['close']
 
             # 计算净值和累积收益
             net_value = net_value * (1 + profit)

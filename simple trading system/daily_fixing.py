@@ -225,6 +225,6 @@ if __name__ == '__main__':
     start = '2015-01-01'
     end = '2017-12-31'
     
-    fill_is_trading_between(start, end)
-    fill_daily_k_at_suspension_days(start, end)
+#    fill_is_trading_between(start, end)
+#    fill_daily_k_at_suspension_days(start, end)
     fill_au_factor_pre_close(start, end)
