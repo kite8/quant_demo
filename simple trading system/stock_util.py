@@ -113,7 +113,7 @@ def compute_ir(df_day_profit):
     # Alpha
     alpha = (df_extra_profit['profit'].mean() - (beta * df_extra_profit['hs300'].mean())) * 245
     # 信息率
-    ir = round(alpha / omega)
+    ir = round(alpha / omega, 4)
 
     print('cov：%10.4f，var_profit：%10.4f，var_hs300：%10.4f，beta：%10.4f，omega：%10.4f，alpha：%10.4f，ir：%10.4f' %
           (cov, var_profit, var_hs300, beta, omega, alpha, ir), flush=True)
