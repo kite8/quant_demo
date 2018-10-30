@@ -36,17 +36,6 @@ def compute_drawdown(net_values):
 
     return max_drawdown
 
-def dynamic_max_drawdown(net_value):
-    nums = len(net_value)
-    maxDrawDown = pd.Series()
-    for i in range(nums):
-        C = net_value[:i].max()
-        if C == net_value[i]:
-            maxDrawDown.loc[i] = 0
-        else:
-            maxDrawDown.loc[i] = abs((C - net_value[i]) / C)
-    return maxDrawDown
-
 
 def compute_annual_profit(trading_days, net_value):
     """

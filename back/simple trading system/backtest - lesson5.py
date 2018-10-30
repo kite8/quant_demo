@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Oct 28 20:42:17 2018
-
-@author: kite
-"""
-
 """
 普量学院量化投资课程系列案例源码包
 普量学院版权所有
@@ -21,16 +14,12 @@ compare_close_2_ma_10：工具方法，某日收盘价和当日对应的10日均
 backtest：回测主逻辑方法，从股票池获取股票后，按照每天的交易日一天天回测
 """
 
-from pymongo import DESCENDING, ASCENDING
-import numpy as np
+from pymongo import DESCENDING
 import pandas as pd
 import matplotlib.pyplot as plt
 from stock_pool_strategy import stock_pool, find_out_stocks
 from database import DB_CONN
 from stock_util import get_trading_dates
-
-CURRENT_MAX_DROP_RATE = 0.03
-MAX_DROP_RATE = 0.05
 
 def is_k_up_break_ma10(code, _date):
     """
@@ -43,7 +32,7 @@ def is_k_up_break_ma10(code, _date):
 
     # 如果股票当日停牌或者是下跌，则返回False
     current_daily = DB_CONN['daily_hfq'].find_one(
-        {'code': code, 'date': _date, 'index':False, 'is_trading': True})
+        {'code': code, 'date': _date, 'is_trading': True})
 
     if current_daily is None:
         print('计算信号，K线上穿MA10，当日没有K线，股票 %s，日期：%s' % (code, _date), flush=True)
@@ -51,7 +40,7 @@ def is_k_up_break_ma10(code, _date):
 
     # 计算MA10
     daily_cursor = DB_CONN['daily_hfq'].find(
-        {'code': code, 'date': {'$lte': _date}, 'index':False},
+        {'code': code, 'date': {'$lte': _date}},
         sort=[('date', DESCENDING)],
         limit=11,
         projection={'code': True, 'close': True, 'is_trading': True}
@@ -94,14 +83,14 @@ def is_k_down_break_ma10(code, _date):
 
     # 如果股票当日停牌或者是下跌，则返回False
     current_daily = DB_CONN['daily_hfq'].find_one(
-        {'code': code, 'date': _date, 'index':False, 'is_trading': True})
+        {'code': code, 'date': _date, 'is_trading': True})
     if current_daily is None:
         print('计算信号，K线下穿MA10，当日没有K线，股票 %s，日期：%s' % (code, _date), flush=True)
         return False
 
     # 计算MA10
     daily_cursor = DB_CONN['daily_hfq'].find(
-        {'code': code, 'date': {'$lte': _date}, 'index':False},
+        {'code': code, 'date': {'$lte': _date}},
         sort=[('date', DESCENDING)],
         limit=11,
         projection={'code': True, 'close': True, 'is_trading': True}
@@ -172,9 +161,6 @@ def backtest(begin_date, end_date):
     :param begin_date: 回测开始日期
     :param end_date: 回测结束日期
     """
-    stop_lose_position_date_current = []
-    stop_lose_position_date = []
-    
     cash = 1E7
     single_position = 2E5
 
@@ -184,7 +170,7 @@ def backtest(begin_date, end_date):
     all_dates = get_trading_dates(begin_date, end_date)
 
     hs300_begin_value = DB_CONN['daily'].find_one(
-        {'code': '000300', 'date': all_dates[0], 'index': True},
+        {'code': '000300', 'index': True, 'date': all_dates[0]},
         projection={'close': True})['close']
 
     adjust_dates, date_codes_dict = stock_pool(begin_date, end_date)
@@ -195,8 +181,6 @@ def backtest(begin_date, end_date):
     to_be_bought_codes = set()
     holding_code_dict = dict()
     last_date = None
-    last_entry_dates = {}
-    
     # 按照日期一步步回测
     for _date in all_dates:
         print('Backtest at %s.' % _date)
@@ -235,17 +219,12 @@ def backtest(begin_date, end_date):
         if len(to_be_sold_codes) > 0:
             sell_daily_cursor = DB_CONN['daily'].find(
                 {'code': {'$in': list(to_be_sold_codes)}, 'date': _date, 'index': False, 'is_trading': True},
-                projection={'open': True, 'code': True, 'low_limit':True}
+                projection={'open': True, 'code': True}
             )
 
             for sell_daily in sell_daily_cursor:
                 code = sell_daily['code']
-                
-                # 若开盘价是跌停价不准卖出
-                open_price = sell_daily['open']
-                low_limit = sell_daily['low_limit']
-                
-                if (code in before_sell_holding_codes) & (open_price > low_limit):
+                if code in before_sell_holding_codes:
                     holding_stock = holding_code_dict[code]
                     holding_volume = holding_stock['volume']
                     sell_price = sell_daily['open']
@@ -254,9 +233,6 @@ def backtest(begin_date, end_date):
 
                     cost = holding_stock['cost']
                     single_profit = (sell_amount - cost) * 100 / cost
-                    
-                    last_entry_dates[code] = None
-                    
                     print('卖出 %s, %6d, %6.2f, %8.2f, %4.2f' %
                           (code, holding_volume, sell_price, sell_amount, single_profit))
 
@@ -269,19 +245,12 @@ def backtest(begin_date, end_date):
         print('待买股票池：', to_be_bought_codes, flush=True)
         if len(to_be_bought_codes) > 0:
             buy_daily_cursor = DB_CONN['daily'].find(
-                {'code': {'$in': list(to_be_bought_codes)}, 'date': _date, 'index': False, 'is_trading': True},
-                projection={'code': True, 'open': True, 'high_limit':True}
+                {'code': {'$in': list(to_be_bought_codes)}, 'date': _date, 'is_trading': True, 'index': False},
+                projection={'code': True, 'open': True}
             )
-            
 
-            
             for buy_daily in buy_daily_cursor:
-
-                # 若开盘价是涨停价不准买入
-                open_price = buy_daily['open']
-                high_limit = buy_daily['high_limit']
-                
-                if (cash > single_position) & (open_price < high_limit):
+                if cash > single_position:
                     buy_price = buy_daily['open']
                     code = buy_daily['code']
                     volume = int(int(single_position / buy_price) / 100) * 100
@@ -291,8 +260,6 @@ def backtest(begin_date, end_date):
                         'volume': volume,
                         'cost': buy_amount,
                         'last_value': buy_amount}
-                    
-                    last_entry_dates[code] = _date
 
                     print('买入 %s, %6d, %6.2f, %8.2f' % (code, volume, buy_price, buy_amount))
 
@@ -321,34 +288,6 @@ def backtest(begin_date, end_date):
         for holding_code in holding_codes:
             if is_k_down_break_ma10(holding_code, _date):
                 to_be_sold_codes.add(holding_code)
-                
-            """
-            止损条件:
-                1.当日亏损超过3%
-                2.累计亏损超过10%
-            满足其一就卖出
-            注意，这里的回测逻辑是无法应用到模拟盘的，因为用了当天的收盘价去计算亏损；
-            当然在回测里没问题，毕竟是第二天要卖出的股票，所以姑且当做收盘后的判断吧；
-            """
-            # 当天收盘价
-            current_close = DB_CONN['daily'].find_one(
-                {'code':holding_code, 'date':_date,'index':False})['close']
-            
-            # 买入时的价格和日期
-            entry_date = last_entry_dates[holding_code]
-            entry_daily_cursor = DB_CONN['daily'].find_one(
-                {'code':holding_code, 'date':entry_date,'index':False}
-            )
-            entry_price = entry_daily_cursor['open']
-            entry_date_close = entry_daily_cursor['close']
-            
-            if (entry_date == _date) & (((entry_price - entry_date_close) / entry_price) > CURRENT_MAX_DROP_RATE):
-                to_be_sold_codes.add(holding_code)
-                stop_lose_position_date_current.append(_date)
-                
-            elif ((entry_price - current_close) / entry_price) > MAX_DROP_RATE:
-                to_be_sold_codes.add(holding_code)
-                stop_lose_position_date.append(_date)
 
         # 检查是否有需要第二天买入的股票
         to_be_bought_codes.clear()
@@ -379,7 +318,7 @@ def backtest(begin_date, end_date):
         total_capital = total_value + cash
 
         hs300_current_value = DB_CONN['daily'].find_one(
-            {'code': '000300', 'date': _date, 'index': True},
+            {'code': '000300', 'index': True, 'date': _date},
             projection={'close': True})['close']
 
         print('收盘后，现金: %10.2f, 总资产: %10.2f' % (cash, total_capital))
@@ -390,27 +329,11 @@ def backtest(begin_date, end_date):
             'hs300': round(100 * (hs300_current_value - hs300_begin_value) / hs300_begin_value, 2)
         }
 
-    print(np.sort(list(set(stop_lose_position_date))))
-    print(np.sort(list(set(stop_lose_position_date_current))))
+
     df_profit.plot(title='Backtest Result', y=['profit', 'hs300'], kind='line')
     plt.show()
 
 
 
 if __name__ == "__main__":
-    daily_hfq_col = DB_CONN['daily_hfq']
-    if 'code_1_date_1_index_1_is_trading_1' not in daily_hfq_col.index_information().keys():
-        daily_hfq_col.create_index(
-                [('code', ASCENDING), ('date', ASCENDING), 
-                 ('index', ASCENDING), ('is_tradingng', ASCENDING)]
-                )
-        
-    
-    daily_col = DB_CONN['daily']
-    if 'code_1_date_1_index_1_is_trading_1' not in daily_col.index_information().keys():
-        daily_col.create_index(
-                [('code', ASCENDING), ('date', ASCENDING), 
-                 ('index', ASCENDING), ('is_tradingng', ASCENDING)]
-                )
-    
     backtest('2015-01-01', '2015-12-31')

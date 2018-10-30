@@ -14,11 +14,12 @@ from pandas import DataFrame
 from pymongo import ASCENDING, UpdateOne
 
 from database import DB_CONN
-from stock_util import get_all_codes
+import tushare as ts
+# from stock_util import get_all_codes
 
 
 def compute_rsi(begin_date, end_date):
-    codes = get_all_codes()
+    codes = ts.get_stock_basics().index.tolist() # get_all_codes()
 
     # 计算RSI
     N = 12
@@ -87,5 +88,14 @@ def is_rsi_over_bought(code, date):
 
 
 if __name__ == '__main__':
-    compute_rsi('2015-01-01', '2015-12-31')
+    rsi_col = DB_CONN['rsi']
+    if 'code_1_date_1' not in rsi_col.index_information().keys():
+        rsi_col.create_index(
+            [('code', ASCENDING), ('date', ASCENDING)])
+    
+    if 'code_1_date_1_signal_1' not in rsi_col.index_information().keys():
+        rsi_col.create_index(
+            [('code', ASCENDING), ('date', ASCENDING), ('signal', ASCENDING)])
+    
+    compute_rsi('2015-01-01', '2018-12-31')
 
