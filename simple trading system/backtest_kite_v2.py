@@ -15,7 +15,7 @@ Created on Tue Oct 30 10:12:34 2018
         
     backtest：回测主逻辑方法，从股票池获取股票后，按照每天的交易日一天天回测
 """
-
+import pickle
 from pymongo import DESCENDING, ASCENDING
 import numpy as np
 import pandas as pd
@@ -45,7 +45,15 @@ def backtest(begin_date, end_date, stop_method=None, pos_method='equal'):
     Arguments:
         begin_date: 回测开始日期
         end_date: 回测结束日期
-        stop_method : 止损方式,默认无止损
+        stop_method : 止损方式
+            None : 无止损
+            fixed : 固定比例止损
+            float : 浮动止损
+            ATR_float_dynamic : 动态ATR浮动止损
+            ATR_float_static : 静态ATR浮动止损
+        pos_method : 头寸分配方式
+            equal : 均仓分配头寸
+            atr : 按照ATR分配头寸
     
     Returns:
         Account: 数据类型,dict
@@ -58,6 +66,7 @@ def backtest(begin_date, end_date, stop_method=None, pos_method='equal'):
             day_profit : 每日收益
             positions : 每日仓位
             stop_loss : 止损的方式和止损参数
+            position_manage : 头寸管理方式和相关参数
     """
     # 记录止损时间点
 #    stop_lose_position_date_current = []
@@ -67,8 +76,17 @@ def backtest(begin_date, end_date, stop_method=None, pos_method='equal'):
     Account = {}
     
     # 仓位相关的初始化
+    position_manage = {}
     if pos_method == 'equal':
         single_position = 2E5
+        position_manage['头寸分配方式'] = '均仓'
+        Account['position_manage'] = position_manage
+    elif pos_method == 'atr':
+        position_manage['头寸分配方式'] = 'ATR分配头寸'
+        position_manage['ATR_WIN'] = ATR_WIN
+        position_manage['RISK_RATIO'] = RISK_RATIO
+        Account['position_manage'] = position_manage
+        
     positions = pd.Series() # 记录每日仓位信息
     stop_loss = {}
     
@@ -89,10 +107,10 @@ def backtest(begin_date, end_date, stop_method=None, pos_method='equal'):
         stop_loss['跌幅比例'] = MAX_DROP_RATE
         stop_loss['止损方式'] = '浮动止损'
         Account['stop_loss'] = stop_loss
-    elif stop_method == 'ATR_float':
+    elif (stop_method == 'ATR_float_dynamic') or (stop_method == 'ATR_float_static'):
         stop_loss['ATR_WIN'] = ATR_WIN
         stop_loss['ATR_RATIO'] = ATR_RATIO
-        stop_loss['止损方式'] = 'ATR浮动止损'
+        stop_loss['止损方式'] = '动态ATR浮动止损'
         Account['stop_loss'] = stop_loss
 
 
@@ -218,7 +236,8 @@ def backtest(begin_date, end_date, stop_method=None, pos_method='equal'):
                 high_limit = buy_daily['high_limit']
                 code = buy_daily['code']
                 
-                if pos_method == 'ATR':
+                # ===========================ATR分配头寸 code start=========================
+                if pos_method == 'atr':
                     ATR = calc_ATR(code, _date)
                     single_position = init_assets * RISK_RATIO / (ATR_RATIO * ATR) // 100 * 100
                 
@@ -336,6 +355,20 @@ def backtest(begin_date, end_date, stop_method=None, pos_method='equal'):
 def stop_loss_positions(holding_code, _date, last_entry_dates, to_be_sold_codes, method):
     """
     注意，这里回测中的止损逻辑，应当看做成收盘后的处理,因为盘中不可能知道收盘价的!!
+    
+    1.固定比例止损
+        满足以下其一就进行全部止损:
+        1.单日亏损超过3%;
+        2.累计亏损超过10%
+    
+    
+    2.固定比例浮动止损:
+        回看区间 -- 自买入日到当前回测日
+        条件 -- 回看区间内的最高价下跌超过一定比例, 就进行止损;
+    
+    3.动态波动率浮动止损:
+        回看区间 -- 自买入日到当前回测日
+        条件 -- 回看区间内的最高价下跌, 超过回测日ATR的倍数, 就进行止损;
     """
     # 当前收盘价,使用后复权
     current_cursor = DB_CONN['daily_hfq'].find_one(
@@ -351,15 +384,7 @@ def stop_loss_positions(holding_code, _date, last_entry_dates, to_be_sold_codes,
             )
     high = max([x['high'] for x in interval_cursor])
     
-    # ===========================止损共用代码 code end =========================
-    
     # ===========================固定比例止损 code start=========================    
-    """
-    止损条件:
-        1.单日亏损超过3%;
-        2.累计亏损超过10%
-    满足其一就卖出
-    """
     if method == 'fixed':
         current_open = current_cursor['open']
         
@@ -373,29 +398,22 @@ def stop_loss_positions(holding_code, _date, last_entry_dates, to_be_sold_codes,
             
         elif ((entry_price - current_close) / entry_price) > MAX_DROP_RATE:
             to_be_sold_codes.add(holding_code)
-        
-    # ===========================固定比例止损 code end=========================
     
     # ===========================固定比例浮动止损 code start===================
-    
-#    止损条件:
-#        回看区间 -- 自买入日到当前回测日
-#        条件 -- 回看区间内的最高价下跌超过一定比例, 就进行止损操作
-
     elif method == 'float':                
         if (high - current_close) > MAX_DROP_RATE:
             to_be_sold_codes.add(holding_code)
     
-    # ===========================固定比例浮动止损 code end=====================
-    
-    # ===========================波动率止损 code start=========================
-    # 运用实时(动态)波动率止损
-    elif method == 'ATR_float':
+    # ===========================波动率浮动止损 code start=========================
+    # 运用实时(动态)波动率浮动止损
+    elif method == 'ATR_float_dynamic':
         ATR = calc_ATR(holding_code, _date)
         if ATR is not None:
             if (high - current_close) > ATR * ATR_RATIO:
                 to_be_sold_codes.add(holding_code)
-        # ===========================波动率止损 code end===========================
+    elif method == 'ATR_float_static':
+        ATR = calc_ATR(holding_code, entry_date)
+        
 
 def calc_ATR(code, date):
     ATR_cursor = DB_CONN['daily_hfq'].find(
@@ -467,8 +485,13 @@ def account_analysis(Account, start, end):
     
     plt.show()
     
+def save_file(Account):
+    
+    with open('backtest--001.file', 'wb') as f:
+        pickle.dump(Account, f)
+    
 
-# 回去先删掉错误的索引,2333, 索引我这里错了多少次了啊
+
 if __name__ == "__main__":
     start = '2017-01-01'
     end = '2017-12-31'
@@ -488,6 +511,6 @@ if __name__ == "__main__":
                  ('index', ASCENDING), ('is_trading', ASCENDING)]
                 )
     
-    Account = backtest(start, end, 'ATR_float')
+    Account = backtest(start, end)
     
     account_analysis(Account, start, end)
