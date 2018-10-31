@@ -10,6 +10,7 @@ from pymongo import UpdateOne, ASCENDING
 from database import DB_CONN
 from stock_util import get_trading_dates# , get_all_codes
 import tushare as ts
+import numpy as np
 
 """
 日K线数据的修复
@@ -196,11 +197,11 @@ def fill_au_factor_pre_close(begin_date, end_date):
 
                 doc = dict()
 
-                au_factor = round(date_hfq_close_dict[date] / close, 2)
+                au_factor = np.round(date_hfq_close_dict[date] / close, 2)
                 doc['au_factor'] = au_factor
                 if last_close != -1 and last_au_factor != -1:
                     pre_close = last_close * last_au_factor / au_factor
-                    doc['pre_close'] = round(pre_close, 2)
+                    doc['pre_close'] = np.round(pre_close, 2)
 
                 last_au_factor = au_factor
                 last_close = close

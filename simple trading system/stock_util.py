@@ -14,6 +14,7 @@ from pymongo import ASCENDING, DESCENDING
 from database import DB_CONN
 from datetime import datetime, timedelta
 import tushare as ts
+import numpy as np
 import pandas as pd
 
 def compute_drawdown(net_values):
@@ -60,7 +61,7 @@ def compute_annual_profit(trading_days, net_value):
         # 计算年化收益
         annual_profit = pow(net_value, 1 / years) - 1
 
-    annual_profit = round(annual_profit * 100, 2)
+    annual_profit = np.round(annual_profit * 100, 2)
 
     return annual_profit
 
@@ -76,7 +77,7 @@ def compute_sharpe_ratio(net_value, df_day_profit):
     trading_days = df_day_profit.index.size
 
     # 计算单日收益标准差
-    profit_std = round(df_day_profit['profit'].std(), 4)
+    profit_std = np.round(df_day_profit['profit'].std(), 4)
     print(profit_std)
 
     # 年化收益
@@ -113,7 +114,7 @@ def compute_ir(df_day_profit):
     # Alpha
     alpha = (df_extra_profit['profit'].mean() - (beta * df_extra_profit['hs300'].mean())) * 245
     # 信息率
-    ir = round(alpha / omega, 4)
+    ir = np.round(alpha / omega, 4)
 
     print('cov：%10.4f，var_profit：%10.4f，var_hs300：%10.4f，beta：%10.4f，omega：%10.4f，alpha：%10.4f，ir：%10.4f' %
           (cov, var_profit, var_hs300, beta, omega, alpha, ir), flush=True)

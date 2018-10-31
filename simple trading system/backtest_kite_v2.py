@@ -17,7 +17,7 @@ Created on Tue Oct 30 10:12:34 2018
 """
 
 from pymongo import DESCENDING, ASCENDING
-#import numpy as np
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from stock_pool_strategy import stock_pool, find_out_stocks
@@ -32,17 +32,20 @@ plt.rcParams['image.interpolation'] = 'nearest'
 plt.rcParams['image.cmap'] = 'gray'
 plt.style.use('ggplot')
 
-CURRENT_MAX_DROP_RATE = 0.03
-MAX_DROP_RATE = 0.05
+SINGLE_DAY_MAX_DROP_RATE = 0.03
+MAX_DROP_RATE = 0.1
 ATR_WIN = 14
+ATR_RATIO = 2
+RISK_RATIO = 0.01
 
 
 
-def backtest(begin_date, end_date):
+def backtest(begin_date, end_date, stop_method=None, pos_method='equal'):
     """
     Arguments:
         begin_date: 回测开始日期
         end_date: 回测结束日期
+        stop_method : 止损方式,默认无止损
     
     Returns:
         Account: 数据类型,dict
@@ -54,18 +57,44 @@ def backtest(begin_date, end_date):
             profit : 收益
             day_profit : 每日收益
             positions : 每日仓位
+            stop_loss : 止损的方式和止损参数
     """
     # 记录止损时间点
-    stop_lose_position_date_current = []
-    stop_lose_position_date = []
-    
-    cash = 1E7
-    single_position = 2E5
-    positions = pd.Series() # 记录每日仓位信息
+#    stop_lose_position_date_current = []
+#    stop_lose_position_date = []
     
     # 记录回测账户信息
     Account = {}
-    Account['init_assets'] = cash
+    
+    # 仓位相关的初始化
+    if pos_method == 'equal':
+        single_position = 2E5
+    positions = pd.Series() # 记录每日仓位信息
+    stop_loss = {}
+    
+    cash = 1E7
+    init_assets = cash
+    Account['init_assets'] = init_assets
+    Account['start'] = begin_date
+    Account['end'] = end_date
+    
+    if stop_method is None:
+        Account['stop_loss'] = '无止损'
+    elif stop_method == 'fixed':
+        stop_loss['单日跌幅比例'] = SINGLE_DAY_MAX_DROP_RATE
+        stop_loss['累计跌幅比例'] = MAX_DROP_RATE
+        stop_loss['止损方式'] = '固定比例止损'
+        Account['stop_loss'] = stop_loss
+    elif stop_method == 'float':    
+        stop_loss['跌幅比例'] = MAX_DROP_RATE
+        stop_loss['止损方式'] = '浮动止损'
+        Account['stop_loss'] = stop_loss
+    elif stop_method == 'ATR_float':
+        stop_loss['ATR_WIN'] = ATR_WIN
+        stop_loss['ATR_RATIO'] = ATR_RATIO
+        stop_loss['止损方式'] = 'ATR浮动止损'
+        Account['stop_loss'] = stop_loss
+
 
     # 时间为key的净值、收益和同期沪深基准
     df_profit = pd.DataFrame(columns=['net_value', 'profit', 'hs300'])
@@ -187,10 +216,15 @@ def backtest(begin_date, end_date):
                 # 若开盘价是涨停价不准买入
                 open_price = buy_daily['open']
                 high_limit = buy_daily['high_limit']
+                code = buy_daily['code']
+                
+                if pos_method == 'ATR':
+                    ATR = calc_ATR(code, _date)
+                    single_position = init_assets * RISK_RATIO / (ATR_RATIO * ATR) // 100 * 100
                 
                 if (cash > single_position) & (open_price < high_limit):
                     buy_price = buy_daily['open']
-                    code = buy_daily['code']
+                    
                     volume = int(int(single_position / buy_price) / 100) * 100
                     buy_amount = buy_price * volume
                     cash -= buy_amount
@@ -235,70 +269,11 @@ def backtest(begin_date, end_date):
         for holding_code in holding_codes:
             if is_k_down_break_ma10(holding_code, _date):
                 to_be_sold_codes.add(holding_code)
-                
-            # ===========================止损共用代码 code start =========================
-            """
-            注意，这里回测中的止损逻辑，应当看做成收盘后的处理,因为盘中不可能知道收盘价的!!
-            """
-            # 当前收盘价,使用后复权
-            current_close = DB_CONN['daily_hfq'].find_one(
-                {'code':holding_code, 'date':_date,'index':False})['close']
             
-            # 买入时的价格和日期
-            entry_date = last_entry_dates[holding_code]
+            if stop_method is not None:
+                stop_loss_positions(holding_code, _date, last_entry_dates, 
+                                    to_be_sold_codes, stop_method)
 
-            
-            # ===========================止损共用代码 code end =========================
-            
-            # ===========================固定比例止损 code start=========================    
-            """
-            止损条件:
-                1.当日亏损超过3%
-                2.累计亏损超过10%
-            满足其一就卖出
-            """
-#            entry_daily_cursor = DB_CONN['daily_hfq'].find_one(
-#                {'code':holding_code, 'date':entry_date,'index':False}
-#            )
-#            entry_price = entry_daily_cursor['open']
-#            
-#            # 买入当日的收盘价
-#            entry_date_close = entry_daily_cursor['close']
-#            if (entry_date == _date) & (((entry_price - entry_date_close) / entry_price) > CURRENT_MAX_DROP_RATE):
-#                to_be_sold_codes.add(holding_code)
-#                stop_lose_position_date_current.append(_date)
-#                
-#            elif ((entry_price - current_close) / entry_price) > MAX_DROP_RATE:
-#                to_be_sold_codes.add(holding_code)
-#                stop_lose_position_date.append(_date)
-                
-            # ===========================固定比例止损 code end=========================
-            
-            # ===========================固定比例浮动止损 code start===================
-            """
-            止损条件:
-                回看区间 -- 自买入日到当前回测日
-                条件 -- 回看区间内的最高价下跌超过一定比例, 就进行止损操作
-            """
-            look_back_cursor = DB_CONN['daily_hfq'].find(
-                    {'code':holding_code, 'date':{'$gte': entry_date, '$lte': _date}, 'index':False},
-                    projection={'high':True, '_id':False}
-                    )
-            high = max([x['high'] for x in look_back_cursor])
-            
-            if (high - current_close) > MAX_DROP_RATE:
-                to_be_sold_codes.add(holding_code)
-                stop_lose_position_date.append(_date)
-            
-            # ===========================固定比例浮动止损 code end=====================
-            
-            # ===========================波动率止损 code start=========================
-            # 运用实时(动态)波动率止损
-            
-            
-            
-            # ===========================波动率止损 code end===========================
-            
         # 检查是否有需要第二天买入的股票
         to_be_bought_codes.clear()
         if this_phase_codes is not None:
@@ -334,16 +309,16 @@ def backtest(begin_date, end_date):
 
         print('收盘后，现金: %10.2f, 总资产: %10.2f' % (cash, total_capital))
         last_date = _date
-        net_value = round(total_capital / 1e7, 2)
+        net_value = np.round(total_capital / 1e7, 4)
         df_profit.loc[_date] = {
-            'net_value': round(total_capital / 1e7, 4),
-            'profit': round(100 * (total_capital - 1e7) / 1e7, 4),
-            'hs300': round(100 * (hs300_current_value - hs300_begin_value) / hs300_begin_value, 4)
+            'net_value': np.round(total_capital / 1e7, 4),
+            'profit': np.round(100 * (total_capital - 1e7) / 1e7, 4),
+            'hs300': np.round(100 * (hs300_current_value - hs300_begin_value) / hs300_begin_value, 4)
         }
         # 计算单日收益
         df_day_profit.loc[_date] = {
-            'profit': round(100 * (total_capital - last_total_capital) / last_total_capital, 4),
-            'hs300': round(100 * (hs300_current_value - last_hs300_close) / last_hs300_close, 4)
+            'profit': np.round(100 * (total_capital - last_total_capital) / last_total_capital, 4),
+            'hs300': np.round(100 * (hs300_current_value - last_hs300_close) / last_hs300_close, 4)
         }
         # 暂存当日的总资产和HS300，作为下一个交易日计算单日收益的基础
         last_total_capital = total_capital
@@ -357,8 +332,88 @@ def backtest(begin_date, end_date):
     Account['positions'] = positions
     
     return Account
-        
 
+def stop_loss_positions(holding_code, _date, last_entry_dates, to_be_sold_codes, method):
+    """
+    注意，这里回测中的止损逻辑，应当看做成收盘后的处理,因为盘中不可能知道收盘价的!!
+    """
+    # 当前收盘价,使用后复权
+    current_cursor = DB_CONN['daily_hfq'].find_one(
+        {'code':holding_code, 'date':_date,'index':False})
+    
+    # 买入时的价格和日期
+    entry_date = last_entry_dates[holding_code]
+    current_close = current_cursor['close']
+    
+    interval_cursor = DB_CONN['daily_hfq'].find(
+            {'code':holding_code, 'date':{'$gte': entry_date, '$lte': _date}, 'index':False},
+            projection={'high':True, '_id':False}
+            )
+    high = max([x['high'] for x in interval_cursor])
+    
+    # ===========================止损共用代码 code end =========================
+    
+    # ===========================固定比例止损 code start=========================    
+    """
+    止损条件:
+        1.单日亏损超过3%;
+        2.累计亏损超过10%
+    满足其一就卖出
+    """
+    if method == 'fixed':
+        current_open = current_cursor['open']
+        
+        entry_daily_cursor = DB_CONN['daily_hfq'].find_one(
+            {'code':holding_code, 'date':entry_date,'index':False}
+        )
+        entry_price = entry_daily_cursor['open']
+        
+        if ((current_open - current_close) / current_open) > SINGLE_DAY_MAX_DROP_RATE:
+            to_be_sold_codes.add(holding_code)
+            
+        elif ((entry_price - current_close) / entry_price) > MAX_DROP_RATE:
+            to_be_sold_codes.add(holding_code)
+        
+    # ===========================固定比例止损 code end=========================
+    
+    # ===========================固定比例浮动止损 code start===================
+    
+#    止损条件:
+#        回看区间 -- 自买入日到当前回测日
+#        条件 -- 回看区间内的最高价下跌超过一定比例, 就进行止损操作
+
+    elif method == 'float':                
+        if (high - current_close) > MAX_DROP_RATE:
+            to_be_sold_codes.add(holding_code)
+    
+    # ===========================固定比例浮动止损 code end=====================
+    
+    # ===========================波动率止损 code start=========================
+    # 运用实时(动态)波动率止损
+    elif method == 'ATR_float':
+        ATR = calc_ATR(holding_code, _date)
+        if ATR is not None:
+            if (high - current_close) > ATR * ATR_RATIO:
+                to_be_sold_codes.add(holding_code)
+        # ===========================波动率止损 code end===========================
+
+def calc_ATR(code, date):
+    ATR_cursor = DB_CONN['daily_hfq'].find(
+            {'code':code, 'date':{'$lte': date}, 'index':False},
+            projection={'open':True, 'high':True, 'low':True, 'close':True, '_id':False},
+            limit = ATR_WIN+1)
+    if ATR_cursor is None:
+        return None
+    df = pd.DataFrame([r for r in ATR_cursor])
+    
+    if len(df) != ATR_WIN+1:
+        return None
+    
+    df = df.assign(pdc = df['close'].shift(1))
+    tr = df.apply(lambda x : max( x['high'] - x['low'], abs(x["high"] - x["pdc"]), 
+                                 abs(x['low'] - x['pdc'])), axis=1)
+    ATR = tr[- ATR_WIN :].mean()
+    return ATR
 
 def account_analysis(Account, start, end):
     '''
@@ -413,16 +468,16 @@ def account_analysis(Account, start, end):
     plt.show()
     
 
-
+# 回去先删掉错误的索引,2333, 索引我这里错了多少次了啊
 if __name__ == "__main__":
-    start = '2016-01-01'
-    end = '2018-06-30'
+    start = '2017-01-01'
+    end = '2017-12-31'
     
     daily_hfq_col = DB_CONN['daily_hfq']
     if 'code_1_date_1_index_1_is_trading_1' not in daily_hfq_col.index_information().keys():
         daily_hfq_col.create_index(
                 [('code', ASCENDING), ('date', ASCENDING), 
-                 ('index', ASCENDING), ('is_tradingng', ASCENDING)]
+                 ('index', ASCENDING), ('is_trading', ASCENDING)]
                 )
         
     
@@ -430,9 +485,9 @@ if __name__ == "__main__":
     if 'code_1_date_1_index_1_is_trading_1' not in daily_col.index_information().keys():
         daily_col.create_index(
                 [('code', ASCENDING), ('date', ASCENDING), 
-                 ('index', ASCENDING), ('is_tradingng', ASCENDING)]
+                 ('index', ASCENDING), ('is_trading', ASCENDING)]
                 )
     
-    Account = backtest(start, end)
+    Account = backtest(start, end, 'ATR_float')
     
     account_analysis(Account, start, end)
