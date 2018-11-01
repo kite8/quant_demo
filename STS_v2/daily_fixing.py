@@ -4,7 +4,7 @@ Created on Sun Oct 14 19:52:31 2018
 
 @author: kite
 """
-import datetime
+import datetime, time
 from datetime import datetime, timedelta
 from pymongo import UpdateOne, ASCENDING
 from database import DB_CONN
@@ -227,6 +227,9 @@ if __name__ == '__main__':
     start = '2015-01-01'
     end = '2018-09-30'
     
+    tic = time.process_time()
 #    fill_is_trading_between(start, end)
     fill_daily_k_at_suspension_days(start, end)
-#    fill_au_factor_pre_close(start, end)
+    fill_au_factor_pre_close(start, end)
+    toc = time.process_time()
+    print('cost time : %.2fs' % (toc-tic))

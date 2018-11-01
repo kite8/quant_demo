@@ -5,7 +5,7 @@ Created on Fri Oct 26 16:14:54 2018
 @author: kite
 """
 import datetime, time
-from pymongo import UpdateOne, ASCENDING
+from pymongo import UpdateOne, ASCENDING, UpdateMany
 from database import DB_CONN
 from stock_util import get_trading_dates, get_all_codes
 import tushare as ts
@@ -73,7 +73,7 @@ def fixing_is_st():
     for i,code in enumerate(codes):
         try:
             update_requests.append(
-                UpdateOne(
+                UpdateMany(
                 {'code':code, 'index':False},
                 {'$set':{'is_st':False}},
                 upsert=True))
@@ -97,7 +97,7 @@ def fixing_is_st():
         if pd.isna(df.loc[code, '戴帽摘帽日期']):
             continue
         
-        st_date_info = df.loc[code, '戴帽摘帽日期']
+        st_date_info = df.loc[code, '戴帽摘帽日期'].split(',')
         
         st_interval_list = []
         temp_st_end = None
@@ -111,8 +111,13 @@ def fixing_is_st():
             elif key == '去ST' and count >0:
                 temp_st_start = datetime.datetime.strptime(st_date_info[count-1].split(':')[1], 
                                            '%Y-%m-%d').strftime('%Y-%m-%d')
-                st_interval_list.append([temp_st_start, temp_st_end])
+                
+                if temp_st_end is None:
+                    st_interval_list.append([temp_st_start, today])
+                else:
+                    st_interval_list.append([temp_st_start, temp_st_end])
                 temp_st_end = (value - datetime.timedelta(1)).strftime('%Y-%m-%d')
+                
             elif count == (len(st_date_info)-1):
                 if temp_st_end is not None:
                     st_interval_list.append([value.strftime('%Y-%m-%d'), temp_st_end])
@@ -122,7 +127,7 @@ def fixing_is_st():
         for interval in st_interval_list:
             _start, _end = interval
             update_requests.append(
-                UpdateOne(
+                UpdateMany(
                 {'code':code, 'date':{'$gte':_start, '$lte':_end}, 'index':False},
                 {'$set':{'is_st':True}}))
         
