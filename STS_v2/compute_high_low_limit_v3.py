@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Oct 26 16:14:54 2018
+Created on Fri Nov  2 15:19:45 2018
 
 @author: kite
 """
+
 import datetime, time
 from pymongo import UpdateOne, ASCENDING, UpdateMany
 from database import DB_CONN
@@ -60,85 +61,62 @@ def fill_issueprice_and_timeToMarket():
         print('填充字段， 字段名: issueprice，数据集：%s，插入：%4d条，更新：%4d条' %
                   ('basic', update_result.upserted_count, update_result.modified_count), flush=True)
 
-def fixing_is_st():
+def fixing_is_st(start, end):
     # 第一阶段
-    df = pd.read_excel('data/ipo_info.xlsx', header=0, dtype={'code':str})
+    df = pd.read_excel('data/stock_basic.xlsx', header=0, dtype={'code':str})
     df = df.set_index('code')
-    codes = df.index.tolist()
+    codes = df[df['是否ST过'] == 1].index.tolist()
+    total = len(codes)
+#    all_dates = get_trading_dates(start, end)
     
     daily = DB_CONN['daily']
     
-    
-    total = len(codes)
-    for i,code in enumerate(codes):
-        update_requests = []
-        try:
-            update_requests.append(
-                UpdateMany(
-                {'code':code, 'index':False},
-                {'$set':{'is_st':False}},
-                upsert=True))
-        except:
-            print('code: %s, has problem' % code)
-            
-        if len(update_requests)>0:
-            update_result = daily.bulk_write(update_requests, ordered=False)
-            print('填充字段， 字段名: is_st，数据集：%s，插入：%4d条，更新：%4d条' %
-                      ('daily', update_result.upserted_count, update_result.modified_count), flush=True)
-           
-            print('第一阶段填充进度: %s/%s' %(i+1, total))
-    
-    # 第二阶段
-    
-    df = pd.read_excel('data/stock_basic.xlsx', header=0, dtype={'code':str})
-    df = df.set_index('code')
-    today = str(datetime.date.today())
-    
-    for ind, code in enumerate(codes):
-        update_requests = []
-        if pd.isna(df.loc[code, '戴帽摘帽日期']):
-            continue
+    excel_name = 'data/st_info.xlsx'
+    for i in range(2,4):
+#        if i == 0:
+#            all_dates = get_trading_dates('2015-01-01', '2015-12-31')
+#        elif i == 1:
+#            all_dates = get_trading_dates('2016-01-01', '2016-12-31')
+        if i == 2:
+            all_dates = get_trading_dates('2017-01-01', '2017-12-31')
+        elif i == 3:
+            all_dates = get_trading_dates('2018-01-01', '2018-09-30')
         
-        st_date_info = df.loc[code, '戴帽摘帽日期'].split(',')
         
-        st_interval_list = []
-        temp_st_end = None
-        for count, i in enumerate(st_date_info):
-            key = i.split(':')[0]
-            value = datetime.datetime.strptime(i.split(':')[1], '%Y-%m-%d')
-            
-            if key == '去ST' and count==0:
-                temp_st_end = (value - datetime.timedelta(1)).strftime('%Y-%m-%d')
-            
-            elif key == '去ST' and count >0:
-                temp_st_start = datetime.datetime.strptime(st_date_info[count-1].split(':')[1], 
-                                           '%Y-%m-%d').strftime('%Y-%m-%d')
-                
-                if temp_st_end is None:
-                    st_interval_list.append([temp_st_start, today])
-                else:
-                    st_interval_list.append([temp_st_start, temp_st_end])
-                temp_st_end = (value - datetime.timedelta(1)).strftime('%Y-%m-%d')
-                
-            elif count == (len(st_date_info)-1):
-                if temp_st_end is not None:
-                    st_interval_list.append([value.strftime('%Y-%m-%d'), temp_st_end])
-                else:
-                    st_interval_list.append([value.strftime('%Y-%m-%d'), today])
+        print('数据读取中')
+        df = pd.read_excel(excel_name, i, header=0, dtype={'code':str})
+        df = df.set_index(['code','state'])
+        df.columns = df.columns.astype(np.datetime64)
+        df.columns = df.columns.to_period('D')
+        df.columns = df.columns.astype('str')
+        print('数据读取完毕')
         
-        for interval in st_interval_list:
-            _start, _end = interval
-            update_requests.append(
-                UpdateMany(
-                {'code':code, 'date':{'$gte':_start, '$lte':_end}, 'index':False},
-                {'$set':{'is_st':True}}))
         
-        if len(update_requests)>0:
-            update_result = daily.bulk_write(update_requests, ordered=False)
-            print('填充字段， 字段名: is_st，数据集：%s，插入：%4d条，更新：%4d条' %
-                      ('daily', update_result.upserted_count, update_result.modified_count), flush=True)
-           
-            print('第二阶段填充进度: %s/%s' %(ind+1, total))
+        for j, code in enumerate(codes):
+            update_requests = []
+            for date in all_dates:
+                try:
+                    st_state = df.xs([code])[date]['是否ST']
+                    sst_state = df.xs([code])[date]['是否*ST']
+                    if (st_state == '否') and (sst_state == '否'):
+                        is_st_flag = False
+                    else:
+                        is_st_flag = True
+                    
+                    update_requests.append(
+                        UpdateOne(
+                                {'code':code, 'date':date, 'index':False},
+                                {'$set':{'is_st':is_st_flag}}
+                                )
+                        )
+                except:
+                    print('something is wrong, code : %s, date : %s' % (code, date))
+                        
+            if len(update_requests)>0:
+                update_result = daily.bulk_write(update_requests, ordered=False)
+                print('第%s年填充进度: %s/%s， 字段名: is_st，数据集：%s，插入：%4d条，更新：%4d条' %
+                          (i+1, j+1, total, 'daily', update_result.upserted_count, update_result.modified_count), flush=True)
+               
             
 
 def fill_high_and_low_price_between(start, end):
@@ -151,6 +129,9 @@ def fill_high_and_low_price_between(start, end):
     """
 #    st_mark = ['st', 'ST', '*st', '*ST']
     codes = ts.get_stock_basics().index.tolist()
+    _df = pd.read_excel('data/stock_basic.xlsx', header=0, dtype={'code':str})
+    _df = _df.set_index('code')
+    st_codes = _df[_df['是否ST过'] == 1].index.tolist()
     total = len(codes)
     error_code = []
 
@@ -164,7 +145,7 @@ def fill_high_and_low_price_between(start, end):
         
         daily_cursor = DB_CONN['daily'].find(
                 {'code':code, 'date':{'$lte': end, '$gte': timeToMarket}, 'index':False},
-                projection={'code':True, 'date':True, 'pre_close':True, 'is_st':True, '_id':False})
+                projection={'code':True, 'date':True, 'pre_close':True, '_id':False})
         
         update_requests = []
         
@@ -220,9 +201,12 @@ def fill_high_and_low_price_between(start, end):
 #                high_limit = np.round(np.round(issueprice * 1.2, 2) * 1.2, 2)
 #                low_limit = np.round(np.round(issueprice * 0.8, 2) * 0.8, 2)
 
-            if daily['is_st'] :
-                high_limit = np.round(pre_close * 1.05, 2)
-                low_limit = np.round(pre_close * 0.95, 2)
+#            if daily['is_st'] :
+            if code in st_codes:
+                st_flag = DB_CONN['daily'].find_one({'code':code, 'date':date, 'index':False})['is_st']
+                if st_flag:
+                    high_limit = np.round(pre_close * 1.05, 2)
+                    low_limit = np.round(pre_close * 0.95, 2)
             
             else:
                 high_limit = np.round(pre_close * 1.1, 2)
@@ -250,7 +234,7 @@ if __name__ == '__main__':
     start = '2015-01-01'
     end = '2018-09-30'
     tic = time.process_time()
-#    fixing_is_st()
+    fixing_is_st(start, end)
 #    fill_issueprice_and_timeToMarket()
     fill_high_and_low_price_between(start, end)
     toc = time.process_time()

@@ -142,19 +142,19 @@ def get_trading_dates(begin_date=None, end_date=None):
     
     # 下面这个方法是很好，起码是本地的，不需要联网，前提是有下载这段时间的数据
     # 因为默认下载的是2015年的，所以需要再下载2017年的数据
-    daily_cursor = DB_CONN.daily.find(
-        {'code': '000001', 'date': {'$gte': begin_date, '$lte': end_date}, 'index': True},
-        sort=[('date', ASCENDING)],
-        projection={'date': True, '_id': False})
-
-    dates = [x['date'] for x in daily_cursor]
-    
-    if len(dates) == 0:
-        all_trade_dates = ts.trade_cal()
-        trade_dates = all_trade_dates[(all_trade_dates.isOpen == 1) & \
-                                     (all_trade_dates.calendarDate >= begin_date) & \
-                                     (all_trade_dates.calendarDate <= end_date)]
-        dates = trade_dates.calendarDate.tolist()
+#    daily_cursor = DB_CONN.daily.find(
+#        {'code': '000001', 'date': {'$gte': begin_date, '$lte': end_date}, 'index': True},
+#        sort=[('date', ASCENDING)],
+#        projection={'date': True, '_id': False})
+#
+#    dates = [x['date'] for x in daily_cursor]
+#    
+#    if len(dates) == 0:
+    all_trade_dates = ts.trade_cal()
+    trade_dates = all_trade_dates[(all_trade_dates.isOpen == 1) & \
+                                 (all_trade_dates.calendarDate >= begin_date) & \
+                                 (all_trade_dates.calendarDate <= end_date)]
+    dates = trade_dates.calendarDate.tolist()
 
     return dates
 
