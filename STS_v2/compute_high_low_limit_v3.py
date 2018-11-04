@@ -72,11 +72,11 @@ def fixing_is_st(start, end):
     daily = DB_CONN['daily']
     
     excel_name = 'data/st_info.xlsx'
-    for i in range(2,4):
-#        if i == 0:
-#            all_dates = get_trading_dates('2015-01-01', '2015-12-31')
-#        elif i == 1:
-#            all_dates = get_trading_dates('2016-01-01', '2016-12-31')
+    for i in range(4):
+        if i == 0:
+            all_dates = get_trading_dates('2015-01-01', '2015-12-31')
+        elif i == 1:
+            all_dates = get_trading_dates('2016-01-01', '2016-12-31')
         if i == 2:
             all_dates = get_trading_dates('2017-01-01', '2017-12-31')
         elif i == 3:

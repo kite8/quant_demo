@@ -33,7 +33,7 @@ plt.rcParams['image.cmap'] = 'gray'
 plt.style.use('ggplot')
 
 SINGLE_DAY_MAX_DROP_RATE = 0.03
-MAX_DROP_RATE = 0.1
+MAX_DROP_RATE = 0.05
 ATR_WIN = 14
 ATR_RATIO = 2
 RISK_RATIO = 0.01
@@ -493,8 +493,8 @@ def save_file(Account):
 
 
 if __name__ == "__main__":
-    start = '2017-01-01'
-    end = '2017-12-31'
+    start = '2016-01-01'
+    end = '2018-09-30'
     
     daily_hfq_col = DB_CONN['daily_hfq']
     if 'code_1_date_1_index_1_is_trading_1' not in daily_hfq_col.index_information().keys():
@@ -511,6 +511,6 @@ if __name__ == "__main__":
                  ('index', ASCENDING), ('is_trading', ASCENDING)]
                 )
     
-    Account = backtest(start, end)
+    Account = backtest(start, end, 'fixed')
     
     account_analysis(Account, start, end)

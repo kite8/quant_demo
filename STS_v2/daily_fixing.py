@@ -26,9 +26,12 @@ def fill_is_trading_between(begin_date=None, end_date=None):
     all_dates = get_trading_dates(begin_date, end_date)
     total = len(all_dates)
     for i,date in enumerate(all_dates):
+        _tic = time.process_time()
         fill_single_date_is_trading(date, 'daily')
         fill_single_date_is_trading(date, 'daily_hfq')
-        print('is_trading字段填充进度: (%s/%s)' % (i+1, total))
+        _toc = time.process_time()
+        expect_time = (_toc - _tic) * (total - i - 1 )
+        print('is_trading字段填充进度: (%s/%s), 预计还需要%.2fs' % (i+1, total, expect_time))
 
 
 def fill_is_trading(date=None):
@@ -107,8 +110,8 @@ def fill_daily_k_at_suspension_days(begin_date=None, end_date=None):
 
     all_dates = get_trading_dates(begin_date, end_date)
 
-#    fill_daily_k_at_suspension_days_at_date_one_collection(
-#        basics, all_dates, 'daily')
+    fill_daily_k_at_suspension_days_at_date_one_collection(
+        basics, all_dates, 'daily')
     fill_daily_k_at_suspension_days_at_date_one_collection(
         basics, all_dates, 'daily_hfq')
 
@@ -125,6 +128,10 @@ def fill_daily_k_at_suspension_days_at_date_one_collection(
     code_last_trading_daily_dict = dict()
     total = len(all_dates)
     for i,date in enumerate(all_dates):
+        
+        _tic = time.process_time()
+
+        
         update_requests = []
         last_daily_code_set = set(code_last_trading_daily_dict.keys())
         for basic in basics:
@@ -157,11 +164,15 @@ def fill_daily_k_at_suspension_days_at_date_one_collection(
                                 {'code': code, 'date': date, 'index':False},
                                 {'$set': suspension_daily_doc},
                                 upsert=True))
+        
+        _toc = time.process_time()
+        expect_time = (_toc - _tic) * (total - i - 1 )
         if len(update_requests) > 0:
             update_result = DB_CONN[collection].bulk_write(update_requests, ordered=False)
-            print('填充停牌数据，日期：%s，数据集：%s，插入：%4d条，更新：%4d条' %
-                  (date, collection, update_result.upserted_count, update_result.modified_count), flush=True)
-        print('%s数据库填充停牌数据进度: (%s/%s)' % (collection, i+1, total))
+            print('填充停牌数据进度: (%s/%s)， 日期：%s，数据集：%s，插入：%4d条，更新：%4d条, 预计还需要%.2fs' %
+                  (i+1, total, date, collection, update_result.upserted_count, update_result.modified_count, expect_time), flush=True)
+            
+
 
 def fill_au_factor_pre_close(begin_date, end_date):
     """
@@ -189,7 +200,9 @@ def fill_au_factor_pre_close(begin_date, end_date):
 
         last_close = -1
         last_au_factor = -1
-
+        
+        _tic = time.process_time()
+        
         update_requests = []
         for daily in daily_cursor:
             date = daily['date']
@@ -216,19 +229,37 @@ def fill_au_factor_pre_close(begin_date, end_date):
                 # 恢复成初始值，防止用错
                 last_close = -1
                 last_au_factor = -1
-
+        
+        _toc = time.process_time()
+        expect_time = (_toc - _tic) * (total - i - 1 )
+        
         if len(update_requests) > 0:
             update_result = DB_CONN['daily'].bulk_write(update_requests, ordered=False)
-            print('填充复权因子和前收，进度：(%s / %s), 股票：%s，更新：%4d条' %
-                  (i+1, total, code, update_result.modified_count), flush=True)
+            print('填充复权因子和前收，进度：(%s / %s), 股票：%s，更新：%4d条, 预计还需%.2fs' %
+                  (i+1, total, code, update_result.modified_count, expect_time), flush=True)
 
 
 if __name__ == '__main__':
+    
+    daily = DB_CONN['daily']
+    daily_hfq = DB_CONN['daily_hfq']
+    basic = DB_CONN['basic']
+    if 'date_1' not in daily.index_information().keys():
+        daily.create_index([('date', ASCENDING)])
+        
+    if 'date_1' not in daily_hfq.index_information().keys():
+        daily_hfq.create_index([('date', ASCENDING)])
+        
+    if 'date_1' not in basic.index_information().keys():
+        basic.create_index([('date', ASCENDING)])
+    
     start = '2015-01-01'
     end = '2018-09-30'
     
+    
+    
     tic = time.process_time()
-#    fill_is_trading_between(start, end)
+    fill_is_trading_between(start, end)
     fill_daily_k_at_suspension_days(start, end)
     fill_au_factor_pre_close(start, end)
     toc = time.process_time()

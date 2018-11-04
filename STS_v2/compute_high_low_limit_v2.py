@@ -42,12 +42,14 @@ def fill_issueprice_and_timeToMarket():
     df = df.set_index('code')
     codes = df.index.tolist()
     
-    update_requests = []
+    total = len(codes)
+    
     
     for i,code in enumerate(codes):
+        update_requests = []
         try:
             update_requests.append(
-                UpdateOne(
+                UpdateMany(
                 {'code':code},
                 {'$set':{'issueprice':df.issueprice[code],
                         'timeToMarket':df.timeToMarket[code]}},
@@ -55,10 +57,10 @@ def fill_issueprice_and_timeToMarket():
         except:
             print('code: %s, has problem' % code)
             
-    if len(update_requests)>0:
-        update_result = DB_CONN['basic'].bulk_write(update_requests, ordered=False)
-        print('填充字段， 字段名: issueprice，数据集：%s，插入：%4d条，更新：%4d条' %
-                  ('basic', update_result.upserted_count, update_result.modified_count), flush=True)
+        if len(update_requests)>0:
+            update_result = DB_CONN['basic'].bulk_write(update_requests, ordered=False)
+            print('填充进度: %s/%s， 字段名: issueprice，数据集：%s，插入：%4d条，更新：%4d条' %
+                      (i+1, total, 'basic', update_result.upserted_count, update_result.modified_count), flush=True)
 
 def fixing_is_st():
     # 第一阶段
@@ -251,8 +253,8 @@ if __name__ == '__main__':
     end = '2018-09-30'
     tic = time.process_time()
 #    fixing_is_st()
-#    fill_issueprice_and_timeToMarket()
-    fill_high_and_low_price_between(start, end)
+    fill_issueprice_and_timeToMarket()
+#    fill_high_and_low_price_between(start, end)
     toc = time.process_time()
     delta = toc - tic
     print(delta)
