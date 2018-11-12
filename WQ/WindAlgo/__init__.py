@@ -1,5 +1,228 @@
-# Init signature: BackTest(init_func, handle_data_func)
-# Source:        
+# Type:        module
+# String form: <module 'WindAlgo' from '/opt/conda/lib/python3.5/site-packages/WindAlgo/__init__.py'>
+# File:        /opt/conda/lib/python3.5/site-packages/WindAlgo/__init__.py
+# Source:     
+from WindPy import *
+from .BktData import *
+import re
+import getpass
+from WindCharts import *
+from datetime import datetime,timedelta
+import traceback
+import numpy as np
+import signal
+from functools import reduce
+import ppdb
+import redis
+import requests
+import json
+
+class WQRedis(redis.Redis):
+    def close(self):
+        self.connection_pool.disconnect()
+        
+    def makekey(self, skey):
+        return 'WIND_QUANT_' + skey
+        
+    def get(self, skey):
+        return super(WQRedis, self).get(self.makekey(skey))
+        
+    def set(self, skey, sdata):
+        return super(WQRedis, self).set(self.makekey(skey), sdata)
+        
+    def llen(self, skey):
+        return super(WQRedis, self).llen(self.makekey(skey))
+
+    def lindex(self, skey, idx):
+        return super(WQRedis, self).lindex(self.makekey(skey), idx)
+
+    def delete(self, skey):
+        super(WQRedis, self).delete(self.makekey(skey))
+
+    def rpush(self, skey, sdata):
+        return super(WQRedis, self).rpush(self.makekey(skey), sdata)
+
+    def expire(self, skey, sdata):
+        return super(WQRedis, self).expire(self.makekey(skey), sdata)
+
+    def lpop(self, skey):
+        return super(WQRedis, self).lpop(self.makekey(skey))
+        
+    def lrem(self, skey, sdata, num=0):
+        super(WQRedis, self).lrem(self.makekey(skey), sdata, num)        
+
+# 注意IP问题
+def log_elk(*arg, **kargs):
+    import socket
+    templates_log = 'log_service={} log_action={} log_usingTime={} priority={} :LogMessage:{}'
+    address = ('192.168.161.181', 14560)
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        if len(arg) > 0:
+            if isinstance(arg[0], bytes):
+                s.sendto(arg[0], address)
+            else:
+                s.sendto(arg[0].encode(), address)
+        if len(kargs) > 0:
+            s.sendto(templates_log.format(kargs.get('service', 'strategy'), kargs.get('action', 'request'),
+                                          kargs.get('usingTime', 100), kargs.get('priority', 'INFO'),
+                                          kargs.get('msg', 'strategy test elk')).encode(), address)
+    except Exception:
+        pass
+    s.close()
+
+#r = redis.Redis(host='10.102.17.59', password='abcd1234', port=6379)
+r = WQRedis(host='192.168.161.158', password='redis2017', port=6379)
+data_manager_url = 'http://192.168.161.181:20000'
+
+
+class NotebookCell:
+    def __init__(self):
+        self.id = "dummycellid"
+        self.strategy_id = ''
+
+cell = NotebookCell()
+load_debug_bkt = ""
+TTL = 3 * 60 * 60
+bkt_status = 0
+b_interrupt = False
+b_first_run = True
+
+import getpass
+userName = getpass.getuser()
+wind_log_path = "/usr/local/log/"
+
+class SlippageSetting():
+    def __init__(self, stock_slippage_type='byRate', stock_slippage=0.0001,
+                 future_slippage_type='byRate', future_slippage=0.0001):
+        try:
+            assert stock_slippage_type in ['byRate', 'byVolume'], 'stock_slippage_type should be either "byRate" or "byVolume"!'
+            assert future_slippage_type in ['byRate', 'byVolume'], 'future_slippage_type should be either "byRate" or "byVolume"!'
+            assert isinstance(stock_slippage, float) or isinstance(stock_slippage, int) or isinstance(stock_slippage, np.int64), 'stock_slippage should be a float or int!'
+            assert isinstance(future_slippage, float) or isinstance(future_slippage, int) or isinstance(future_slippage, np.int64), 'future_slippage should be a float or int!'
+        except AssertionError as e:
+            print(e.args[0])
+            raise
+
+        self.stock_slippage_type = stock_slippage_type
+        self.stock_slippage = stock_slippage
+        self.future_slippage_type = future_slippage_type
+        self.future_slippage = future_slippage
+
+class Context:
+    def __init__(self, slippage_setting = None):
+        self.cellid = cell.id.lower()
+        self.strategy_id = cell.strategy_id
+        self.securities = []
+        self.start_date = ""
+        self.end_date = ""
+        self.capital = 100000
+        self.period = 'd' # 'd' or 'm', meaning day or minute
+        self.benchmark = ''
+        self.risk_free_rate = 0.03
+        self.commission = 0.0003
+        self.fee_multi = 3
+        if isinstance(slippage_setting, SlippageSetting):
+            self.slippage_setting = slippage_setting
+        else:
+            self.slippage_setting = SlippageSetting()
+
+    def __str__(self):
+        res = "securities = " + str(self.securities) + "\n" + \
+              "start_date = " + str(self.start_date) + "\n" + \
+              "end_date = " + str(self.end_date) + "\n" + \
+              "capital = " + str(self.capital) + "\n" + \
+              "period = " + str(self.period) + "\n" + \
+              "benchmark = " + str(self.benchmark) + "\n" + \
+              "risk_free_rate = " + str(self.risk_free_rate) + "\n" + \
+              "commission = " + str(self.commission) + "\n" + \
+              "fee_multi = " + str(self.fee_multi) + "\n"
+
+        return res
+
+    @property
+    def position(self):
+        return BackTest.bktobj.query_position()
+
+    @property
+    def bkt(self):
+        return BackTest.bktobj
+
+    def check(self):
+        ctx = self
+        try:
+            assert isinstance(ctx.start_date, str) and re.fullmatch(
+                r'^(?:(?!0000)[0-9]{4}(?:(?:0[1-9]|1[0-2])(?:0[1-9]|1[0-9]|2[0-8])|(?:0[13-9]|1[0-2])(?:29|30)|(?:0[13578]|1[02])31)|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:0[48]|[2468][048]|[13579][26])00)0229)$',
+                ctx.start_date), "start_date should be a string like 20170101"
+            assert isinstance(ctx.end_date, str) and re.fullmatch(
+                r'^(?:(?!0000)[0-9]{4}(?:(?:0[1-9]|1[0-2])(?:0[1-9]|1[0-9]|2[0-8])|(?:0[13-9]|1[0-2])(?:29|30)|(?:0[13578]|1[02])31)|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:0[48]|[2468][048]|[13579][26])00)0229)$',
+                ctx.end_date), "end_date should be a string like 20170102"
+            assert int(ctx.end_date) >= int(ctx.start_date), "end_date should be later than start_date!"
+            assert isinstance(ctx.securities, list) and len(
+                ctx.securities) > 0, "securities should be a list with at least one security code!"
+            assert ctx.period == 'd' or ctx.period == 'm', "period should be either 'd' or 'm'!"
+            assert isinstance(ctx.benchmark, str), "benchmark should be a string!"
+            assert isinstance(ctx.risk_free_rate, float) or isinstance(ctx.risk_free_rate, str), "risk_free_rate should be a float or a string!"
+            assert isinstance(ctx.commission, float), "commission should be a float!"
+            assert isinstance(ctx.capital, int) or isinstance(ctx.capital, np.int64), "capital should be an int!"
+            assert isinstance(ctx.fee_multi, int) or isinstance(ctx.fee_multi, float) or isinstance(ctx.fee_multi, np.int64), "fee_multi should be an int or float!"
+
+        except AssertionError as e:
+            print(e.args[0])
+            raise
+
+context = None
+bktlib = None
+
+# 用于记录日志信息，并写入elk
+# bar_datetime_log = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+def write_log_file(name, data):
+    with open('/wind/{}.txt'.format(name), 'a') as f:
+        f.write(data + '\n')
+
+
+def write_elk(name, sid):
+    import os
+    path = '/wind/{}.txt'.format(name)
+    if os.path.exists(path):
+        with open(path, 'r') as f:
+            text = f.read()
+            log_elk(msg=text, service='huice_'+name+'_'+sid)
+        #os.remove(path)
+
+def remove_datafile():
+    import os
+    for file in ['/wind/flow.txt', '/wind/log.txt', '/wind/trade.txt', '/wind/position.json']:
+        if os.path.exists(file):
+            os.remove(file)
+    
+    #if os.path.exists('/wind/flow.txt'):
+    #    os.remove('/wind/flow.txt')
+    #if os.path.exists('/wind/log.txt'):
+    #    os.remove('/wind/log.txt')
+    #if os.path.exists('/wind/trade.txt'):
+    #    os.remove('/wind/trade.txt')
+    #if os.path.exists('/wind/position.json'):
+    #    os.remove('/wind/position.json')
+        
+        
+def flow_log(level, msg):
+    global context
+    if context and context.strategy_id:
+        shwotime = datetime.now().strftime('%Y-%m-%d %H:%m:%S')
+        text = shwotime + ' [' + level + '] ' + msg
+        print(text)
+        r.rpush(context.strategy_id + '_user', text)
+        write_log_file('flow', text)
+
+#context = Context()
+context_class = Context()
+context = None
+_callback_exception = False
+_show_day = ''
+_show_time = ''
+g_bar_datetime = ''
 class BackTest():
     @staticmethod
     def __bktcallback(bar_datetime, scheduletype, bktout):
@@ -1454,5 +1677,37 @@ class BackTest():
             bktlib.bktend(2, byref(errmsg))
             raise Exception(str(self.bkt_error))
             return None
-# File:           /opt/conda/lib/python3.5/site-packages/WindAlgo/__init__.py
-# Type:           type
+
+
+def pprint(*args, sep=' ', end='\n', file=None):
+    temp_args = []
+    for i in args:
+        if isinstance(i, str):
+            if len(i) > 10000:
+                temp_args.append(i[:10000] + '...........')
+                continue
+        temp_args.append(i)
+    args = tuple(temp_args)
+    print(*args, sep=sep, end=end, file=file)
+
+    count = len(args)
+    str_format = '%s '*count
+    strpt = str_format % args
+    # strpt = str(args)
+    # filter @@@@@@strategy_status_saving@@@@@@/@@@@@@_strategy_status_done@@@@@@ msg, not send to redis
+    if (cell.strategy_id != '') and (strpt.find('@@@@@@strategy_status_saving@@@@@@') == -1) and (strpt.find('@@@@@@_strategy_status_done@@@@@@') == -1):
+        r.rpush(cell.strategy_id + '_user', strpt)
+        r.expire(cell.strategy_id + '_user', TTL)
+        write_log_file('flow', strpt)
+    return
+
+
+def write_log(msg):
+    from datetime import datetime
+    try:
+        log_name = wind_log_path + userName + "-" + datetime.today().strftime("%Y%m%d")
+        msg_prefix = datetime.today().strftime("%Y-%m-%d %H:%M:%S ")
+        with open(log_name, "a+") as f:
+            f.write(msg_prefix + msg + "\n")
+    except:
+        return
